@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111715">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kos">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/kos-192.png">
+  <title>Kos</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #edf2ef;
+      --muted: #a4b0aa;
+      --paper: #111715;
+      --card: #1e2422;
+      --line: #353d39;
+      --green: #78b49a;
+      --green-pale: #25382f;
+      --gold: #d3ad68;
+      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    .shell { max-width: 1080px; margin: 0 auto; padding: 38px 24px 64px; }
+    header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-end; margin-bottom: 28px; }
+    .eyebrow { color: var(--green); font-size: 12px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 5px 0 0; font-size: clamp(30px, 5vw, 46px); letter-spacing: -.045em; line-height: 1.08; }
+    .date { color: var(--muted); text-align: right; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, .82fr); gap: 18px; align-items: start; }
+    .stack { display: grid; gap: 18px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px; box-shadow: 0 7px 22px #00000018; scroll-margin-top: 18px; }
+    .card-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 15px; }
+    h2 { margin: 0; font-size: 20px; letter-spacing: -.025em; }
+    h3 { margin: 20px 0 9px; color: var(--muted); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+    .subtle, .hint { color: var(--muted); font-size: 13px; }
+    .routine-list, .task-list { display: grid; gap: 2px; }
+    .check-row { display: flex; align-items: center; gap: 11px; min-height: 39px; padding: 5px 2px; }
+    .check-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--green); }
+    .check-row label { flex: 1; cursor: pointer; }
+    .check-row input:checked + label { color: #78827b; text-decoration: line-through; }
+    .progress { display: grid; gap: 10px; margin-top: 17px; padding-top: 17px; border-top: 1px solid var(--line); }
+    .field { display: grid; gap: 5px; }
+    .field label { color: var(--muted); font-size: 12px; font-weight: 650; }
+    input[type="text"], input[type="date"], input[type="time"] { width: 100%; min-height: 40px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: #171c1a; color: var(--ink); }
+    input:focus { outline: 2px solid #426c5840; border-color: var(--green); }
+    .reminder-box { display: grid; gap: 11px; padding: 13px; border-radius: 12px; background: var(--green-pale); }
+    .reminder-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .button { min-height: 42px; border: 0; border-radius: 9px; padding: 9px 12px; background: var(--green); color: #102018; font-weight: 700; }
+    .button.secondary { background: #333b37; color: var(--ink); }
+    .button.small { padding: 6px 9px; font-size: 13px; }
+    .task { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+    .task:last-child { border-bottom: 0; }
+    .task input[type="checkbox"] { width: 20px; height: 20px; margin: 3px 0 0; accent-color: var(--green); }
+    .task-title { overflow-wrap: anywhere; }
+    .task-title a { color: var(--green); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    .task-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; color: var(--muted); font-size: 12px; }
+    .task.done .task-title { color: #78827b; text-decoration: line-through; }
+    .task-actions { display: flex; align-items: center; gap: 8px; }
+    .icon-button { min-width: 36px; min-height: 36px; padding: 2px 5px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); }
+    .icon-button:hover { background: #ffffff10; }
+    .empty { color: var(--muted); font-size: 14px; padding: 12px 0; }
+    details.completed { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 14px; }
+    details.completed summary { cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 650; }
+    .add-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 13px 0 4px; }
+    .add-form input { min-width: 0; }
+    .plan-count { color: var(--green); font-size: 13px; font-weight: 650; }
+    .mobile-nav { display: none; }
+    .data-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .connection-status { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+    .connection-status::before { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); content: ""; }
+    .connection-status[data-state="saved"]::before { background: var(--green); }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    @media (max-width: 760px) {
+      .shell { padding: max(20px, env(safe-area-inset-top)) 14px calc(92px + env(safe-area-inset-bottom)); }
+      header { position: relative; align-items: flex-start; flex-direction: row; margin: 4px 2px 18px; }
+      .eyebrow { font-size: 10px; }
+      h1 { font-size: 32px; }
+      .date { max-width: 130px; padding-top: 9px; font-size: 12px; line-height: 1.35; }
+      .grid { grid-template-columns: 1fr; }
+      .stack { gap: 14px; }
+      .grid > .stack:first-child { display: contents; }
+      .grid > .stack:last-child { display: contents; }
+      #routine-card { order: 0; }
+      #tasks-card { order: 1; }
+      #reminder-card { order: 2; }
+      #data-card { order: 3; }
+      #task-groups h3 { margin-top: 16px; }
+      .card { padding: 17px; border-radius: 15px; }
+      .card-heading { align-items: flex-start; }
+      h2 { font-size: 18px; }
+      .check-row { min-height: 44px; }
+      .check-row input[type="checkbox"] { width: 21px; height: 21px; }
+      .task { grid-template-columns: 24px minmax(0, 1fr) 36px; gap: 7px; padding: 11px 0; }
+      .task-meta { align-items: center; gap: 12px; margin-top: 8px; }
+      .task-meta label { display: inline-flex; align-items: center; gap: 5px; }
+      .task-meta input[type="date"] { width: auto; max-width: 150px; min-height: 36px; padding: 5px 7px; font-size: 12px; }
+      .task-meta input[type="checkbox"] { width: 18px; height: 18px; }
+      .add-form { position: sticky; top: 0; z-index: 3; padding: 5px 0 9px; background: var(--card); }
+      .add-form input { min-height: 44px; }
+      .add-form .button { min-width: 76px; }
+      .reminder-actions { display: grid; grid-template-columns: 1fr; }
+      .reminder-actions .button { width: 100%; }
+      .mobile-nav { position: fixed; z-index: 10; right: 12px; bottom: max(10px, env(safe-area-inset-bottom)); left: 12px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 7px; border: 1px solid #ffffff1c; border-radius: 16px; background: #202724ed; box-shadow: 0 8px 30px #0008; backdrop-filter: blur(18px); }
+      .mobile-nav a { display: grid; justify-items: center; gap: 2px; min-height: 48px; padding: 5px 2px; border-radius: 10px; color: var(--muted); font-size: 11px; text-decoration: none; }
+      .mobile-nav a:active { background: #ffffff14; color: var(--ink); }
+      .mobile-nav span:first-child { font-size: 17px; line-height: 1.1; }
+      .data-actions .button { flex: 1; }
+    }
+    @media (max-width: 370px) {
+      .date { max-width: 104px; }
+      .task-meta { display: grid; justify-items: start; }
+      .task-meta input[type="date"] { max-width: 170px; }
+    }
+    @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <div class="eyebrow">Tu asistente diario</div>
+        <h1>Kos</h1>
+      </div>
+      <div class="date" id="today-date"></div>
+    </header>
+
+    <div class="grid">
+      <div class="stack">
+        <section class="card" id="routine-card">
+          <div class="card-heading">
+            <div>
+              <h2>Rutina de hoy</h2>
+              <div class="subtle" id="routine-count"></div>
+            </div>
+          </div>
+          <div class="routine-list" id="routine-list"></div>
+          <div class="progress">
+            <div class="field">
+              <label for="comic-progress">Cómic: capítulo terminado y siguiente</label>
+              <input id="comic-progress" type="text" placeholder="Ej.: terminé el 12; mañana sigo con el 13">
+            </div>
+            <div class="field">
+              <label for="manga-progress">Manga: capítulo terminado y siguiente</label>
+              <input id="manga-progress" type="text" placeholder="Ej.: terminé el 8; mañana sigo con el 9">
+            </div>
+            <div class="field">
+              <label for="photo-progress">Fotos: última fecha que editaste</label>
+              <input id="photo-progress" type="date">
+            </div>
+            <div class="field">
+              <label for="chess-progress">Ajedrez: página donde quedaste</label>
+              <input id="chess-progress" type="text" placeholder="Número de página">
+            </div>
+          </div>
+        </section>
+
+        <section class="card" id="tasks-card">
+          <div class="card-heading">
+            <div>
+              <h2>Agenda y pendientes</h2>
+              <div class="subtle">Elige hasta tres pendientes para enfocar hoy; las fechas son opcionales.</div>
+            </div>
+            <span class="plan-count" id="plan-count"></span>
+          </div>
+          <form class="add-form" id="add-form">
+            <label class="sr-only" for="new-task">Añadir pendiente</label>
+            <input id="new-task" type="text" placeholder="Añadir un pendiente…" autocomplete="off">
+            <button class="button small" type="submit">Añadir</button>
+          </form>
+          <div id="task-groups"></div>
+        </section>
+      </div>
+
+      <div class="stack">
+        <section class="card" id="reminder-card">
+          <div class="card-heading">
+            <div>
+              <h2>Recordatorio diario</h2>
+              <div class="subtle">Todos los días · Bello, Antioquia</div>
+            </div>
+          </div>
+          <div class="reminder-box">
+            <div class="field">
+              <label for="reminder-time">Hora</label>
+              <input id="reminder-time" type="time" value="06:30">
+            </div>
+            <div class="reminder-actions">
+              <button class="button small" id="enable-notifications" type="button">Activar avisos mientras la app está abierta</button>
+              <button class="button secondary small" id="calendar-reminder" type="button">Añadir aviso diario a Calendario</button>
+            </div>
+            <div class="hint" id="reminder-status">El aviso de Calendario puede sonar aunque esta página esté cerrada. macOS debe estar despierto y Calendario debe permitir notificaciones.</div>
+          </div>
+        </section>
+
+        <section class="card" id="data-card">
+          <div class="card-heading">
+            <div>
+              <h2>Datos y sincronización</h2>
+              <div class="subtle">Estado de guardado y copia transportable.</div>
+            </div>
+          </div>
+          <div class="connection-status" id="connection-status" data-state="saved">Guardado en este dispositivo; sincronización en la nube aún no configurada.</div>
+          <p class="subtle">Los cambios se guardan en este navegador. Para moverlos a otro dispositivo, exporta un archivo y luego impórtalo allí.</p>
+          <div class="data-actions">
+            <button class="button small" id="export-data" type="button">Exportar datos</button>
+            <button class="button secondary small" id="import-data-button" type="button">Importar datos</button>
+            <input id="import-data" type="file" accept="application/json,.json" hidden>
+            <button class="button secondary small" id="install-app" type="button" hidden>Instalar Kos</button>
+          </div>
+          <p class="hint" id="sync-explanation">El respaldo manual no sincroniza automáticamente. En iPhone, abre Kos en Safari, toca Compartir y elige «Añadir a pantalla de inicio». Cada navegador conserva sus propios datos.</p>
+        </section>
+      </div>
+    </div>
+  </main>
+  <nav class="mobile-nav" aria-label="Navegación rápida">
+    <a href="#routine-card"><span aria-hidden="true">☑</span><span>Rutina</span></a>
+    <a href="#tasks-card"><span aria-hidden="true">▤</span><span>Pendientes</span></a>
+    <a href="#reminder-card"><span aria-hidden="true">◷</span><span>Recordatorio</span></a>
+  </nav>
+  <script>
+    const seedRoutine = [];
+    const seedTasks = [];
+
+    const storageKey = "personalAssistant.v1";
+    const bogotaFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit" });
+    const todayKey = bogotaFormatter.format(new Date());
+    let state;
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey));
+      state = saved && Array.isArray(saved.tasks) && Array.isArray(saved.routine) ? saved : null;
+    } catch (error) {
+      console.error("No se pudieron leer los datos guardados.", error);
+    }
+    if (!state) {
+      state = { routine: seedRoutine, tasks: seedTasks, checks: {}, progress: {}, reminderTime: "06:30", planDate: todayKey };
+      save();
+    }
+    if (state.planDate !== todayKey) {
+      state.tasks.forEach(task => { task.planned = false; });
+      state.planDate = todayKey;
+      save();
+    }
+
+    const dateFormatter = new Intl.DateTimeFormat("es-CO", { timeZone: "America/Bogota", weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    document.getElementById("today-date").textContent = dateFormatter.format(new Date());
+    document.getElementById("today-date").style.textTransform = "capitalize";
+    const safeText = value => String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+
+    function save() {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(state));
+        const status = document.getElementById("connection-status");
+        status.textContent = "Guardado en este dispositivo; sincronización en la nube aún no configurada.";
+        status.dataset.state = "saved";
+      } catch (error) {
+        console.error("No se pudieron guardar los datos en este dispositivo.", error);
+        const status = document.getElementById("connection-status");
+        status.textContent = "No se pudo guardar en este dispositivo. Exporta una copia de seguridad.";
+        status.dataset.state = "error";
+      }
+    }
+
+    function normalizeImportedState(raw) {
+      if (!raw || typeof raw !== "object" || !Array.isArray(raw.tasks) || !Array.isArray(raw.routine)) {
+        throw new Error("El archivo no contiene una copia de Kos válida.");
+      }
+
+      const nativeFormat = raw.routine.some(item => item && typeof item === "object");
+      const routine = raw.routine.map(item => typeof item === "string" ? item : item?.title);
+      if (routine.some(item => typeof item !== "string" || !item.trim())) {
+        throw new Error("La copia contiene una rutina con formato inválido.");
+      }
+
+      const nativeRoutineIDs = nativeFormat ? raw.routine.map(item => item.id) : [];
+      const checks = nativeFormat
+        ? Object.fromEntries(Object.entries(raw.completedRoutineByDay || {}).map(([day, ids]) => [
+            day, routine.map((_, index) => index).filter(index => Array.isArray(ids) && ids.includes(nativeRoutineIDs[index]))
+          ]))
+        : (raw.checks && typeof raw.checks === "object" ? raw.checks : {});
+
+      const tasks = raw.tasks.map(task => {
+        if (!task || typeof task.title !== "string" || !task.title.trim()) {
+          throw new Error("La copia contiene un pendiente sin título válido.");
+        }
+        let url = typeof task.url === "string" ? task.url : "";
+        if (url) {
+          try {
+            const parsed = new URL(url);
+            url = ["http:", "https:"].includes(parsed.protocol) ? parsed.href : "";
+          } catch {
+            url = "";
+          }
+        }
+        const dueValue = task.due || task.dueDate || "";
+        const due = dueValue ? String(dueValue).slice(0, 10) : "";
+        return {
+          id: String(task.id || crypto.randomUUID()),
+          title: task.title.trim(),
+          category: typeof task.category === "string" && task.category.trim() ? task.category : "Otros",
+          url,
+          done: Boolean(task.done ?? task.isDone),
+          planned: Boolean(task.planned ?? task.isPlanned),
+          due
+        };
+      });
+
+      const nativeProgress = raw.progress && typeof raw.progress === "object" ? raw.progress : {};
+      const progress = {
+        "comic-progress": nativeProgress["comic-progress"] || nativeProgress.comic || "",
+        "manga-progress": nativeProgress["manga-progress"] || nativeProgress.manga || "",
+        "photo-progress": nativeProgress["photo-progress"] || nativeProgress.photos || "",
+        "chess-progress": nativeProgress["chess-progress"] || nativeProgress.chess || ""
+      };
+
+      return {
+        routine,
+        tasks,
+        checks,
+        progress,
+        reminderTime: typeof raw.reminderTime === "string" ? raw.reminderTime : "06:30",
+        planDate: raw.planDate || raw.agendaDay || todayKey
+      };
+    }
+
+    function exportData() {
+      const data = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `kos-respaldo-${todayKey}.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    document.getElementById("export-data").addEventListener("click", exportData);
+    document.getElementById("import-data-button").addEventListener("click", () => {
+      document.getElementById("import-data").click();
+    });
+    document.getElementById("import-data").addEventListener("change", async event => {
+      const [file] = event.target.files || [];
+      if (!file) return;
+      try {
+        const imported = normalizeImportedState(JSON.parse(await file.text()));
+        if (!confirm("Importar esta copia reemplazará los datos de Kos guardados en este navegador. ¿Quieres continuar?")) return;
+        state = imported;
+        if (state.planDate !== todayKey) {
+          state.tasks.forEach(task => { task.planned = false; });
+          state.planDate = todayKey;
+        }
+        save();
+        progressFields.forEach(id => {
+          document.getElementById(id).value = state.progress[id] || "";
+        });
+        reminderTime.value = state.reminderTime;
+        renderRoutine();
+        renderTasks();
+        scheduleBrowserReminder();
+        document.getElementById("sync-explanation").textContent = "Copia importada correctamente. Recuerda que este método transfiere datos manualmente; no sincroniza cambios futuros.";
+      } catch (error) {
+        alert(`No se pudo importar la copia: ${error.message}`);
+      } finally {
+        event.target.value = "";
+      }
+    });
+
+    function renderRoutine() {
+      const done = state.checks[todayKey] || [];
+      document.getElementById("routine-list").innerHTML = state.routine.length
+        ? state.routine.map((item, index) => {
+        const checked = done.includes(index);
+        return `<div class="check-row"><input id="routine-${index}" type="checkbox" data-routine="${index}" ${checked ? "checked" : ""}><label for="routine-${index}">${safeText(item)}</label></div>`;
+      }).join("")
+        : '<div class="empty">Importa tu archivo JSON de Kos para cargar tu rutina y tus pendientes.</div>';
+      document.getElementById("routine-count").textContent = `${done.length} de ${state.routine.length} completadas`;
+      document.querySelectorAll("[data-routine]").forEach(input => input.addEventListener("change", () => {
+        const checkedToday = new Set(state.checks[todayKey] || []);
+        input.checked ? checkedToday.add(Number(input.dataset.routine)) : checkedToday.delete(Number(input.dataset.routine));
+        state.checks[todayKey] = [...checkedToday];
+        save();
+        renderRoutine();
+      }));
+    }
+
+    function renderTasks() {
+      const groups = new Map();
+      state.tasks.forEach(task => {
+        if (task.done) return;
+        if (!groups.has(task.category)) groups.set(task.category, []);
+        groups.get(task.category).push(task);
+      });
+      const plannedCount = state.tasks.filter(task => task.planned && !task.done).length;
+      document.getElementById("plan-count").textContent = `${plannedCount}/3 en agenda`;
+      const openTasks = [...groups.entries()].map(([category, tasks]) =>
+        `<h3>${safeText(category)}</h3><div class="task-list">${tasks.map(task => `
+          <div class="task">
+            <input type="checkbox" aria-label="Marcar ${safeText(task.title)} como completado" data-done="${task.id}">
+            <div>
+              <div class="task-title">${task.url ? `<a href="${safeText(task.url)}" target="_blank" rel="noopener noreferrer">${safeText(task.title)}</a>` : safeText(task.title)}</div>
+              <div class="task-meta">
+                <label><input type="checkbox" data-plan="${task.id}" ${task.planned ? "checked" : ""}> Hoy</label>
+                <label>Fecha: <input type="date" data-due="${task.id}" value="${safeText(task.due || "")}"></label>
+              </div>
+            </div>
+            <button class="icon-button" type="button" aria-label="Eliminar ${safeText(task.title)}" data-delete="${task.id}">×</button>
+          </div>`).join("")}</div>`
+      ).join("") || (state.tasks.length
+        ? '<div class="empty">¡No quedan pendientes abiertos!</div>'
+        : '<div class="empty">Importa una copia de Kos o añade un pendiente para comenzar.</div>');
+      const completed = state.tasks.filter(task => task.done);
+      const completedTasks = completed.length
+        ? `<details class="completed"><summary>Completados (${completed.length})</summary><div class="task-list">${completed.map(task => `
+            <div class="task done">
+              <input type="checkbox" aria-label="Reabrir ${safeText(task.title)}" data-reopen="${task.id}" checked>
+              <div class="task-title">${safeText(task.title)}</div>
+              <span class="task-meta">${safeText(task.category)}</span>
+            </div>`).join("")}</div></details>`
+        : "";
+      document.getElementById("task-groups").innerHTML = openTasks + completedTasks;
+
+      document.querySelectorAll("[data-plan]").forEach(input => input.addEventListener("change", () => {
+        const task = state.tasks.find(item => item.id === input.dataset.plan);
+        if (input.checked && plannedCount >= 3) {
+          input.checked = false;
+          alert("Para que la agenda sea manejable, elige hasta tres pendientes para hoy.");
+          return;
+        }
+        task.planned = input.checked;
+        save();
+        renderTasks();
+      }));
+      document.querySelectorAll("[data-done]").forEach(input => input.addEventListener("change", () => {
+        const task = state.tasks.find(item => item.id === input.dataset.done);
+        task.done = true;
+        task.planned = false;
+        save();
+        renderTasks();
+      }));
+      document.querySelectorAll("[data-reopen]").forEach(input => input.addEventListener("change", () => {
+        const task = state.tasks.find(item => item.id === input.dataset.reopen);
+        task.done = false;
+        save();
+        renderTasks();
+      }));
+      document.querySelectorAll("[data-due]").forEach(input => input.addEventListener("change", () => {
+        const task = state.tasks.find(item => item.id === input.dataset.due);
+        task.due = input.value;
+        save();
+      }));
+      document.querySelectorAll("[data-delete]").forEach(button => button.addEventListener("click", () => {
+        state.tasks = state.tasks.filter(item => item.id !== button.dataset.delete);
+        save();
+        renderTasks();
+      }));
+    }
+
+    document.getElementById("add-form").addEventListener("submit", event => {
+      event.preventDefault();
+      const input = document.getElementById("new-task");
+      const title = input.value.trim();
+      if (!title) return;
+      state.tasks.unshift({ id: crypto.randomUUID(), title, category: "Otros", url: "", done: false, planned: false, due: "" });
+      save();
+      input.value = "";
+      renderTasks();
+    });
+
+    const progressFields = ["comic-progress", "manga-progress", "photo-progress", "chess-progress"];
+    progressFields.forEach(id => {
+      const input = document.getElementById(id);
+      input.value = state.progress[id] || "";
+      input.addEventListener("change", () => {
+        state.progress[id] = input.value;
+        save();
+      });
+    });
+
+    const reminderTime = document.getElementById("reminder-time");
+    reminderTime.value = state.reminderTime || "06:30";
+    reminderTime.addEventListener("change", () => {
+      state.reminderTime = reminderTime.value || "06:30";
+      save();
+      scheduleBrowserReminder();
+    });
+
+    let reminderTimer;
+    function nextBogotaReminder(hour, minute) {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit"
+      }).formatToParts(new Date()).reduce((result, part) => {
+        result[part.type] = part.value;
+        return result;
+      }, {});
+      let timestamp = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), hour + 5, minute);
+      if (timestamp <= Date.now()) timestamp += 24 * 60 * 60 * 1000;
+      return new Date(timestamp);
+    }
+
+    function scheduleBrowserReminder() {
+      clearTimeout(reminderTimer);
+      if (!("Notification" in window) || Notification.permission !== "granted") return;
+      const [hour, minute] = (state.reminderTime || "06:30").split(":").map(Number);
+      const next = nextBogotaReminder(hour, minute);
+      reminderTimer = setTimeout(() => {
+        new Notification("Tu rutina diaria", { body: "Abre tu asistente para revisar la rutina y organizar tus pendientes." });
+        scheduleBrowserReminder();
+      }, next.getTime() - Date.now());
+    }
+
+    document.getElementById("enable-notifications").addEventListener("click", async () => {
+      if (!("Notification" in window)) {
+        document.getElementById("reminder-status").textContent = "Este navegador no ofrece avisos de escritorio. Usa el botón de Calendario para programar el recordatorio.";
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      document.getElementById("reminder-status").textContent = permission === "granted"
+        ? "Avisos activados. Se mostrarán a la hora elegida mientras el navegador y la app sigan abiertos."
+        : "No se concedió permiso. Puedes activar el aviso diario desde Calendario.";
+      scheduleBrowserReminder();
+    });
+
+    document.getElementById("calendar-reminder").addEventListener("click", () => {
+      const [hour, minute] = (state.reminderTime || "06:30").split(":").map(Number);
+      const next = nextBogotaReminder(hour, minute);
+      const dateParts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit"
+      }).formatToParts(next).reduce((result, part) => {
+        result[part.type] = part.value;
+        return result;
+      }, {});
+      const localStamp = `${dateParts.year}${dateParts.month}${dateParts.day}T${String(hour).padStart(2, "0")}${String(minute).padStart(2, "0")}00`;
+      const now = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+      const ics = [
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Asistente Personal//ES", "CALSCALE:GREGORIAN",
+        "BEGIN:VTIMEZONE", "TZID:America/Bogota", "X-LIC-LOCATION:America/Bogota", "BEGIN:STANDARD",
+        "TZOFFSETFROM:-0500", "TZOFFSETTO:-0500", "TZNAME:-05", "DTSTART:19700101T000000", "END:STANDARD",
+        "END:VTIMEZONE", "BEGIN:VEVENT",
+        `UID:asistente-personal-${Date.now()}@local`, `DTSTAMP:${now}`, `DTSTART;TZID=America/Bogota:${localStamp}`,
+        "DURATION:PT10M", "RRULE:FREQ=DAILY", "SUMMARY:Revisar mi asistente personal",
+        "DESCRIPTION:Revisar la rutina y organizar mis pendientes del día.", "BEGIN:VALARM", "ACTION:DISPLAY",
+        "DESCRIPTION:Revisar mi asistente personal", "TRIGGER:PT0M", "END:VALARM", "END:VEVENT", "END:VCALENDAR"
+      ].join("\r\n");
+      const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "recordatorio-asistente-personal.ics";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      document.getElementById("reminder-status").textContent = "Archivo descargado. Ábrelo y confirma la importación en Calendario; verifica que el aviso diario esté activo.";
+    });
+
+    let installPrompt;
+    const installButton = document.getElementById("install-app");
+    window.addEventListener("beforeinstallprompt", event => {
+      event.preventDefault();
+      installPrompt = event;
+      installButton.hidden = false;
+    });
+    installButton.addEventListener("click", async () => {
+      if (!installPrompt) return;
+      await installPrompt.prompt();
+      installPrompt = null;
+      installButton.hidden = true;
+    });
+
+    if ("serviceWorker" in navigator && location.protocol !== "file:") {
+      navigator.serviceWorker.register("./service-worker.js")
+        .catch(error => console.error("No se pudo preparar el modo sin conexión.", error));
+    }
+
+    renderRoutine();
+    renderTasks();
+    scheduleBrowserReminder();
+  </script>
+</body>
+</html>
