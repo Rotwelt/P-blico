@@ -1,10 +1,10 @@
-const CACHE_NAME = "kos-shell-v4";
+const CACHE_NAME = "kos-shell-v11";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./icons/kos-192.png",
-  "./icons/kos-512.png"
+  "./icons/app-icon-192.png",
+  "./icons/app-icon-512.png"
 ];
 
 self.addEventListener("install", event => {
