@@ -114,6 +114,11 @@
     .connection-status { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
     .connection-status::before { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); content: ""; }
     .connection-status[data-state="saved"]::before { background: var(--accent); }
+    .connection-status[data-state="syncing"]::before { background: var(--gold); }
+    .connection-status[data-state="error"]::before { background: #e15b64; }
+    .sync-fields { display: grid; gap: 9px; margin-top: 14px; }
+    .sync-fields input { min-width: 0; }
+    .sync-actions { display: flex; flex-wrap: wrap; gap: 8px; }
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
     @media (max-width: 760px) {
       .shell { padding: max(24px, env(safe-area-inset-top)) 14px calc(92px + env(safe-area-inset-bottom)); }
@@ -151,6 +156,7 @@
       .mobile-nav a:active { background: #ffffff14; color: var(--ink); }
       .mobile-nav span:first-child { font-size: 17px; line-height: 1.1; }
       .data-actions .button { flex: 1; }
+      .sync-actions .button { flex: 1; }
       .rune-dialog { padding: 8px; }
       .rune-panel { max-height: 96vh; border-radius: 14px; }
       .rune-dialog-header { padding: 14px 16px; }
@@ -253,15 +259,26 @@
               <div class="subtle">Estado de guardado y copia transportable.</div>
             </div>
           </div>
-          <div class="connection-status" id="connection-status" data-state="saved">Guardado en este dispositivo; sincronización en la nube aún no configurada.</div>
-          <p class="subtle">Los cambios se guardan en este navegador. Para moverlos a otro dispositivo, exporta un archivo y luego impórtalo allí.</p>
+          <div class="connection-status" id="connection-status" data-state="saved">Guardado en este dispositivo; inicia sesión para sincronizar.</div>
+          <div class="sync-fields">
+            <label class="field"><span>URL del proyecto Supabase</span><input id="cloud-url" type="url" placeholder="https://tu-proyecto.supabase.co" autocomplete="url"></label>
+            <label class="field"><span>Clave publicable de Supabase</span><input id="cloud-key" type="password" placeholder="sb_publishable_…" autocomplete="off"></label>
+            <label class="field"><span>Correo</span><input id="cloud-email" type="email" placeholder="tu@correo.com" autocomplete="username"></label>
+            <label class="field"><span>Contraseña de sincronización</span><input id="cloud-password" type="password" autocomplete="current-password"></label>
+            <div class="sync-actions">
+              <button class="button small" id="cloud-login" type="button">Iniciar sesión</button>
+              <button class="button secondary small" id="cloud-register" type="button">Crear cuenta</button>
+              <button class="button secondary small" id="cloud-logout" type="button" hidden>Cerrar sesión</button>
+            </div>
+          </div>
+          <p class="subtle">Usa la misma cuenta en todos tus dispositivos. Inicia primero en Mac para subir los datos locales. Si trabajas sin conexión, Kos conserva los cambios en el dispositivo y los sincroniza al reconectarse. Ante cambios en distintos dispositivos, prevalece la fecha de modificación más reciente.</p>
           <div class="data-actions">
             <button class="button small" id="export-data" type="button">Exportar datos</button>
             <button class="button secondary small" id="import-data-button" type="button">Importar datos</button>
             <input id="import-data" type="file" accept="application/json,.json" hidden>
             <button class="button secondary small" id="install-app" type="button" hidden>Instalar Kos</button>
           </div>
-          <p class="hint" id="sync-explanation">El respaldo manual no sincroniza automáticamente. En iPhone, abre Kos en Safari, toca Compartir y elige «Añadir a pantalla de inicio». Cada navegador conserva sus propios datos.</p>
+          <p class="hint">La sesión se conserva en este navegador; no se guarda la contraseña. La clave publicable no es una clave administrativa. El respaldo manual sigue disponible. En iPhone, abre Kos en Safari, toca Compartir y elige «Añadir a pantalla de inicio».</p>
         </section>
       </div>
     </div>
@@ -292,10 +309,22 @@
     const seedTasks = [];
 
     const storageKey = "personalAssistant.v1";
+    const cloudConfigKey = "kosCloudConfig.v1";
+    const cloudSessionKey = "kosCloudSession.v1";
+    const cloudModifiedKey = "kosCloudModifiedAt.v1";
+    const savedCloudConfig = JSON.parse(localStorage.getItem(cloudConfigKey) || "{}");
+    let cloudSession = JSON.parse(localStorage.getItem(cloudSessionKey) || "null");
+    let cloudModifiedAt = Number(localStorage.getItem(cloudModifiedKey)) || 0;
+    let cloudInitialized = false;
+    let cloudSyncTimer;
+    let cloudPollTimer;
+    let cloudSyncInProgress = false;
+    let cloudSyncAgain = false;
     const bogotaFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit" });
     const todayKey = bogotaFormatter.format(new Date());
     const expandedDueDates = new Set();
     let state;
+    let appReady = false;
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey));
       state = saved && Array.isArray(saved.tasks) && Array.isArray(saved.routine) ? saved : null;
@@ -314,11 +343,238 @@
       delete state.planDate;
       save();
     }
+    appReady = true;
 
     const dateFormatter = new Intl.DateTimeFormat("es-CO", { timeZone: "America/Bogota", weekday: "long", year: "numeric", month: "long", day: "numeric" });
     document.getElementById("today-date").textContent = dateFormatter.format(new Date());
     document.getElementById("today-date").style.textTransform = "capitalize";
     const safeText = value => String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+    const cloudUrlInput = document.getElementById("cloud-url");
+    const cloudKeyInput = document.getElementById("cloud-key");
+    const cloudEmailInput = document.getElementById("cloud-email");
+    const cloudPasswordInput = document.getElementById("cloud-password");
+    const cloudLoginButton = document.getElementById("cloud-login");
+    const cloudRegisterButton = document.getElementById("cloud-register");
+    const cloudLogoutButton = document.getElementById("cloud-logout");
+    cloudUrlInput.value = savedCloudConfig.url || "";
+    cloudKeyInput.value = savedCloudConfig.key || "";
+
+    function cloudConfig() {
+      const url = cloudUrlInput.value.trim().replace(/\/+$/, "");
+      const key = cloudKeyInput.value.trim();
+      if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(url) || !key) {
+        throw new Error("Introduce una URL válida del proyecto y su clave publicable.");
+      }
+      localStorage.setItem(cloudConfigKey, JSON.stringify({ url, key }));
+      return { url, key };
+    }
+
+    function setCloudStatus(message, status = "saved") {
+      const element = document.getElementById("connection-status");
+      element.textContent = message;
+      element.dataset.state = status;
+    }
+
+    function storeCloudSession(session) {
+      cloudSession = {
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        expires_at: Date.now() + Number(session.expires_in || 3600) * 1000
+      };
+      localStorage.setItem(cloudSessionKey, JSON.stringify(cloudSession));
+      cloudLoginButton.hidden = true;
+      cloudRegisterButton.hidden = true;
+      cloudLogoutButton.hidden = false;
+      cloudPasswordInput.value = "";
+    }
+
+    function clearCloudSession() {
+      cloudSession = null;
+      cloudInitialized = false;
+      clearInterval(cloudPollTimer);
+      clearTimeout(cloudSyncTimer);
+      localStorage.removeItem(cloudSessionKey);
+      cloudLoginButton.hidden = false;
+      cloudRegisterButton.hidden = false;
+      cloudLogoutButton.hidden = true;
+      setCloudStatus("Guardado en este dispositivo; inicia sesión para sincronizar.");
+    }
+
+    async function cloudRequest(path, options = {}, retry = true) {
+      const config = cloudConfig();
+      const headers = {
+        apikey: config.key,
+        "Content-Type": "application/json",
+        ...(cloudSession ? { Authorization: `Bearer ${cloudSession.access_token}` } : {}),
+        ...options.headers
+      };
+      if (cloudSession) headers.Authorization = "Bearer " + cloudSession.access_token;
+      const response = await fetch(`${config.url}${path}`, { ...options, headers });
+      if (response.status === 401 && retry && cloudSession?.refresh_token) {
+        const refreshed = await fetch(`${config.url}/auth/v1/token?grant_type=refresh_token`, {
+          method: "POST",
+          headers: { apikey: config.key, "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: cloudSession.refresh_token })
+        });
+        if (!refreshed.ok) {
+          clearCloudSession();
+          throw new Error("La sesión expiró. Inicia sesión de nuevo.");
+        }
+        storeCloudSession(await refreshed.json());
+        return cloudRequest(path, options, false);
+      }
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.msg || detail.message || detail.error_description || `Error del servicio (${response.status}).`);
+      }
+      return response.status === 204 ? null : response.json();
+    }
+
+    function cloudPayload() {
+      return {
+        routine: state.routine,
+        tasks: state.tasks,
+        checks: state.checks,
+        progress: state.progress,
+        reminderTime: state.reminderTime
+      };
+    }
+
+    async function syncCloud() {
+      if (!cloudSession || !navigator.onLine) return;
+      if (cloudSyncInProgress) {
+        cloudSyncAgain = true;
+        return;
+      }
+      cloudSyncInProgress = true;
+      setCloudStatus("Sincronizando…", "syncing");
+      const modifiedAtAtStart = cloudModifiedAt;
+      try {
+        const response = await cloudRequest("/rest/v1/rpc/kos_sync_state", {
+          method: "POST",
+          body: JSON.stringify({
+            p_state: cloudInitialized ? cloudPayload() : null,
+            p_modified_at: cloudInitialized ? new Date(modifiedAtAtStart).toISOString() : null
+          })
+        });
+        if (cloudModifiedAt !== modifiedAtAtStart) {
+          cloudSyncAgain = true;
+          return;
+        }
+        let row = Array.isArray(response) ? response[0] : response;
+        if (!row) {
+          cloudInitialized = false;
+          setCloudStatus("Aún no hay datos en la nube. Inicia sesión primero en la Mac para subir los datos iniciales.", "error");
+          return;
+        }
+        let serverTime = Date.parse(row.modified_at);
+        if (!Number.isFinite(serverTime)) throw new Error("La nube devolvió una fecha de sincronización inválida.");
+        if (!cloudInitialized && cloudModifiedAt > serverTime) {
+          const uploadResponse = await cloudRequest("/rest/v1/rpc/kos_sync_state", {
+            method: "POST",
+            body: JSON.stringify({
+              p_state: cloudPayload(),
+              p_modified_at: new Date(cloudModifiedAt).toISOString()
+            })
+          });
+          row = Array.isArray(uploadResponse) ? uploadResponse[0] : uploadResponse;
+          if (!row) throw new Error("La nube no devolvió el estado después de la sincronización.");
+          if (cloudModifiedAt !== modifiedAtAtStart) {
+            cloudSyncAgain = true;
+            return;
+          }
+          serverTime = Date.parse(row.modified_at);
+          if (!Number.isFinite(serverTime)) throw new Error("La nube devolvió una fecha de sincronización inválida.");
+        }
+        cloudInitialized = true;
+        if (serverTime > cloudModifiedAt) {
+          const restored = normalizeImportedState(row.state);
+          state = restored;
+          cloudModifiedAt = serverTime;
+          localStorage.setItem(storageKey, JSON.stringify(state));
+          localStorage.setItem(cloudModifiedKey, String(cloudModifiedAt));
+          progressFields.forEach(id => {
+            document.getElementById(id).value = state.progress[id] || "";
+          });
+          reminderTime.value = state.reminderTime;
+          renderRoutine();
+          renderTasks();
+          scheduleBrowserReminder();
+        } else {
+          cloudModifiedAt = Math.max(cloudModifiedAt, serverTime);
+        }
+        localStorage.setItem(cloudModifiedKey, String(cloudModifiedAt));
+        setCloudStatus("Sincronizado automáticamente con tu cuenta.");
+      } catch (error) {
+        console.error("No se pudo sincronizar Kos con la nube.", error);
+        setCloudStatus(`Sincronización pendiente: ${error.message}`, "error");
+      } finally {
+        cloudSyncInProgress = false;
+        if (cloudSyncAgain) {
+          cloudSyncAgain = false;
+          syncCloud();
+        }
+      }
+    }
+
+    function scheduleCloudSync() {
+      if (!cloudSession || !cloudInitialized) return;
+      clearTimeout(cloudSyncTimer);
+      cloudSyncTimer = setTimeout(syncCloud, 500);
+    }
+
+    async function authenticateCloud(createAccount) {
+      cloudLoginButton.disabled = true;
+      cloudRegisterButton.disabled = true;
+      try {
+        const config = cloudConfig();
+        const email = cloudEmailInput.value.trim();
+        const password = cloudPasswordInput.value;
+        if (!email || password.length < 8) throw new Error("Escribe tu correo y una contraseña de al menos 8 caracteres.");
+        setCloudStatus(createAccount ? "Creando cuenta…" : "Iniciando sesión…", "syncing");
+        const response = await fetch(createAccount
+          ? `${config.url}/auth/v1/signup`
+          : `${config.url}/auth/v1/token?grant_type=password`, {
+          method: "POST",
+          headers: { apikey: config.key, "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+        if (!response.ok) {
+          const detail = await response.json().catch(() => ({}));
+          throw new Error(detail.msg || detail.message || detail.error_description || (createAccount ? "No se pudo crear la cuenta." : "No se pudo iniciar sesión."));
+        }
+        const session = await response.json();
+        if (createAccount && !session.access_token) {
+          setCloudStatus("Cuenta creada. Confirma el correo y después inicia sesión.");
+          return;
+        }
+        storeCloudSession(session);
+        cloudInitialized = false;
+        cloudModifiedAt = Number(localStorage.getItem(cloudModifiedKey)) || 0;
+        await syncCloud();
+        clearInterval(cloudPollTimer);
+        cloudPollTimer = setInterval(syncCloud, 10000);
+      } catch (error) {
+        setCloudStatus(error.message, "error");
+      } finally {
+        cloudLoginButton.disabled = false;
+        cloudRegisterButton.disabled = false;
+      }
+    }
+
+    cloudLoginButton.addEventListener("click", () => authenticateCloud(false));
+    cloudRegisterButton.addEventListener("click", () => authenticateCloud(true));
+
+    cloudLogoutButton.addEventListener("click", clearCloudSession);
+    if (cloudSession) {
+      cloudLoginButton.hidden = true;
+      cloudRegisterButton.hidden = true;
+      cloudLogoutButton.hidden = false;
+      syncCloud().then(() => {
+        if (cloudSession) cloudPollTimer = setInterval(syncCloud, 10000);
+      });
+    }
+    window.addEventListener("online", syncCloud);
     const runeDialog = document.getElementById("rune-dialog");
     const runeGrid = document.getElementById("rune-grid");
     const runeNote = document.getElementById("rune-note");
@@ -431,9 +687,16 @@
     function save() {
       try {
         localStorage.setItem(storageKey, JSON.stringify(state));
-        const status = document.getElementById("connection-status");
-        status.textContent = "Guardado en este dispositivo; sincronización en la nube aún no configurada.";
-        status.dataset.state = "saved";
+        if (appReady) {
+          cloudModifiedAt = Math.max(Date.now(), cloudModifiedAt + 1);
+          localStorage.setItem(cloudModifiedKey, String(cloudModifiedAt));
+        }
+        if (cloudSession && cloudInitialized) {
+          setCloudStatus("Guardado aquí; sincronización en curso…", "syncing");
+          scheduleCloudSync();
+        } else if (!cloudSession) {
+          setCloudStatus("Guardado en este dispositivo; inicia sesión para sincronizar.");
+        }
       } catch (error) {
         console.error("No se pudieron guardar los datos en este dispositivo.", error);
         const status = document.getElementById("connection-status");
@@ -532,7 +795,7 @@
         renderRoutine();
         renderTasks();
         scheduleBrowserReminder();
-        document.getElementById("sync-explanation").textContent = "Copia importada correctamente. Recuerda que este método transfiere datos manualmente; no sincroniza cambios futuros.";
+        document.getElementById("sync-explanation").textContent = "Copia importada correctamente. Si iniciaste sesión, estos datos también se sincronizarán.";
       } catch (error) {
         alert(`No se pudo importar la copia: ${error.message}`);
       } finally {

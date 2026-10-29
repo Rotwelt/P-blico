@@ -1,4 +1,4 @@
-const CACHE_NAME = "kos-shell-v13";
+const CACHE_NAME = "kos-shell-v14";
 const APP_SHELL = [
   "./",
   "./index.html",
