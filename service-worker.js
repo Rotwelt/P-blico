@@ -1,8 +1,9 @@
-const CACHE_NAME = "kos-shell-v12";
+const CACHE_NAME = "kos-shell-v13";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
+  "./runes/library.json",
   "./icons/app-icon-192.png",
   "./icons/app-icon-512.png"
 ];

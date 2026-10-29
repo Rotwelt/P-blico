@@ -270,23 +270,11 @@
     <div class="rune-panel">
       <div class="rune-dialog-header">
         <h2 id="rune-dialog-title">Repasar runas</h2>
-        <button class="button secondary small" id="close-rune-dialog" type="button">Cerrar</button>
-      </div>
-      <div class="rune-panel-content">
-        <div class="rune-import" id="rune-import">
-          <p>Los archivos se abren en este dispositivo; Kos no los sube. Selecciona las carpetas locales para cargar la galería.</p>
-          <label class="rune-file-field">1. Carpeta <strong>Runas</strong> (notas e imágenes adjuntas)
-            <input id="rune-notes-files" type="file" multiple webkitdirectory directory>
-          </label>
-          <label class="rune-file-field">2. Carpeta <strong>Runas/Attachments</strong> (solo si no quedó incluida arriba)
-            <input id="rune-attachment-files" type="file" multiple accept="image/*">
-          </label>
-          <label class="rune-file-field">3. Carpeta <strong>Google Keep/Assets</strong> (imágenes enlazadas)
-            <input id="rune-assets-files" type="file" multiple webkitdirectory directory>
-          </label>
-          <div class="hint" id="rune-load-status" role="status">Si el navegador no permite elegir carpetas, selecciona los archivos .md, luego las imágenes de Attachments y Google Keep/Assets.</div>
+          <button class="button secondary small" id="close-rune-dialog" type="button">Cerrar</button>
         </div>
-        <div class="rune-grid" id="rune-grid" hidden></div>
+        <div class="rune-panel-content">
+          <p class="hint" id="rune-load-status" role="status" aria-live="polite">Cargando la biblioteca de runas…</p>
+          <div class="rune-grid" id="rune-grid" hidden></div>
         <article class="rune-note" id="rune-note" hidden>
           <button class="button secondary small rune-back" id="rune-back" type="button">← Galería</button>
           <div id="rune-note-content"></div>
@@ -334,73 +322,54 @@
     const runeDialog = document.getElementById("rune-dialog");
     const runeGrid = document.getElementById("rune-grid");
     const runeNote = document.getElementById("rune-note");
-    const runeImport = document.getElementById("rune-import");
     const runeLoadStatus = document.getElementById("rune-load-status");
-    const runeNoteFiles = new Map();
-    const runeAssetFiles = new Map();
     let runeEntries = [];
-    let runeObjectURLs = [];
+    let runeLoadPromise;
 
     function showRuneDialog() {
       runeDialog.hidden = false;
       document.getElementById("close-rune-dialog").focus();
+      if (!runeEntries.length) loadRuneLibrary();
     }
 
     function closeRuneDialog() {
       runeDialog.hidden = true;
       runeNote.hidden = true;
       runeGrid.hidden = runeEntries.length === 0;
-      runeImport.hidden = false;
       document.getElementById("rune-dialog-title").textContent = "Repasar runas";
     }
 
-    function appendRuneFiles(input, destination) {
-      for (const file of input.files || []) destination.set(file.name, file);
-      input.value = "";
-      loadRuneLibrary();
-    }
-
     async function loadRuneLibrary() {
-      const markdownFiles = [...runeNoteFiles.values()].filter(file => file.name.toLowerCase().endsWith(".md"));
-      if (!markdownFiles.length) {
-        runeLoadStatus.textContent = "Selecciona la carpeta Runas con los archivos Markdown.";
-        return;
-      }
-
-      runeObjectURLs.forEach(URL.revokeObjectURL);
-      runeObjectURLs = [];
-      const images = new Map([...runeNoteFiles, ...runeAssetFiles]);
-      try {
-        runeEntries = await Promise.all(markdownFiles.map(async file => {
-          let body = await file.text();
-          body = body.replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*\r?\n/, "");
-          const imageMatches = [...body.matchAll(/!\[\[([^|\]]+)(?:\|[^\]]*)?\]\]/g)];
-          const imageURLs = [];
-          let missingImages = 0;
-          for (const match of imageMatches) {
-            const imageFile = images.get(match[1].trim());
-            if (imageFile) imageURLs.push(URL.createObjectURL(imageFile));
-            else missingImages += 1;
-          }
-          body = body.replace(/^\s*!\[\[[^\]]+\]\]\s*$/gm, "").trim();
-          return {
-            title: file.name.replace(/\.md$/i, ""),
-            body,
-            imageURLs,
-            missingImages
-          };
-        }));
-        runeObjectURLs = runeEntries.flatMap(entry => entry.imageURLs);
+      if (runeLoadPromise) return runeLoadPromise;
+      runeLoadStatus.textContent = "Cargando la biblioteca de runas…";
+      runeLoadPromise = (async () => {
+        try {
+          const libraryURL = new URL("./runes/library.json", location.href);
+          const response = await fetch(libraryURL);
+          if (!response.ok) throw new Error(`El servidor respondió ${response.status}.`);
+          const records = await response.json();
+          if (!Array.isArray(records)) throw new Error("El índice de la biblioteca no tiene el formato esperado.");
+          runeEntries = records.map(record => ({
+            title: String(record.title),
+            body: String(record.body),
+            imageURLs: Array.isArray(record.images)
+              ? record.images.map(path => new URL(path, libraryURL).href)
+              : [],
+            missingImages: Number(record.missingImages) || 0
+          }));
         runeEntries.sort((first, second) => first.title.localeCompare(second.title, "en", { sensitivity: "base" }));
         const missingImages = runeEntries.reduce((count, entry) => count + entry.missingImages, 0);
         runeLoadStatus.textContent = missingImages
-          ? `${runeEntries.length} notas cargadas; ${missingImages} imagen(es) enlazada(s) no disponible(s) en las carpetas seleccionadas. Los archivos permanecen en este dispositivo.`
-          : `${runeEntries.length} notas cargadas sin imágenes faltantes. Los archivos permanecen en este dispositivo.`;
+          ? `${runeEntries.length} notas cargadas; ${missingImages} imagen(es) enlazada(s) no está(n) disponible(s).`
+          : `${runeEntries.length} notas e imágenes listas para repasar.`;
         renderRuneGallery();
-      } catch (error) {
-        console.error("No se pudieron leer las notas de runas seleccionadas.", error);
-        runeLoadStatus.textContent = `No se pudieron leer los archivos seleccionados: ${error.message}`;
-      }
+        } catch (error) {
+          console.error("No se pudo cargar la biblioteca pública de runas.", error);
+          runeLoadStatus.textContent = `No se pudo cargar la galería: ${error.message}`;
+          runeLoadPromise = null;
+        }
+      })();
+      return runeLoadPromise;
     }
 
     function renderRuneGallery() {
@@ -416,7 +385,6 @@
       `).join("");
       runeGrid.hidden = false;
       runeNote.hidden = true;
-      runeImport.hidden = false;
       runeGrid.querySelectorAll("[data-rune-note]").forEach(button => button.addEventListener("click", () => {
         const entry = runeEntries[Number(button.dataset.runeNote)];
         document.getElementById("rune-dialog-title").textContent = entry.title;
@@ -425,7 +393,7 @@
           ${entry.imageURLs.length
             ? entry.imageURLs.map((imageURL, imageIndex) => `<img class="rune-note-image" src="${imageURL}" alt="Imagen ${imageIndex + 1} de ${safeText(entry.title)}">`).join("")
             : '<div class="rune-placeholder">Imagen no disponible</div>'}
-          ${entry.missingImages ? `<p class="hint">${entry.missingImages} imagen(es) enlazada(s) no está(n) disponible(s) en las carpetas seleccionadas.</p>` : ""}
+          ${entry.missingImages ? `<p class="hint">${entry.missingImages} imagen(es) enlazada(s) no está(n) disponible(s) en la biblioteca de origen.</p>` : ""}
           <div class="rune-note-body">${renderRuneMarkdown(entry.body)}</div>
         `;
         runeGrid.hidden = true;
@@ -453,9 +421,6 @@
       runeNote.hidden = true;
       runeGrid.hidden = false;
     });
-    document.getElementById("rune-notes-files").addEventListener("change", event => appendRuneFiles(event.target, runeNoteFiles));
-    document.getElementById("rune-attachment-files").addEventListener("change", event => appendRuneFiles(event.target, runeNoteFiles));
-    document.getElementById("rune-assets-files").addEventListener("change", event => appendRuneFiles(event.target, runeAssetFiles));
     runeDialog.addEventListener("click", event => {
       if (event.target === runeDialog) closeRuneDialog();
     });
