@@ -77,8 +77,10 @@
     .empty { color: var(--muted); font-size: 14px; padding: 12px 0; }
     details.completed { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 14px; }
     details.completed summary { cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 650; }
-    .add-form, .routine-add-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; margin: 15px 0 15px; }
+    .add-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 9px; margin: 15px 0 15px; }
+    .routine-add-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; margin: 15px 0 15px; }
     .add-form input { min-width: 0; }
+    .add-form input[type="date"] { width: 155px; min-width: 0; }
     .routine-add-form input { min-width: 0; }
     .routine-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 36px; align-items: center; gap: 9px; min-height: 42px; }
     .routine-row input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent); }
@@ -147,6 +149,9 @@
       .task-meta input[type="date"] { max-width: 145px; min-width: 122px; min-height: 30px; padding: 4px 6px; font-size: 12px; }
       .task-meta input[type="checkbox"] { width: 18px; height: 18px; }
       .add-form, .routine-add-form { position: sticky; top: 0; z-index: 3; padding: 5px 0 9px; background: linear-gradient(var(--card), var(--card) 82%, transparent); }
+      .add-form { grid-template-columns: minmax(0, 1fr) auto; }
+      .add-form #new-task { grid-column: 1 / -1; }
+      .add-form input[type="date"] { width: 100%; }
       .add-form input, .routine-add-form input { min-height: 44px; }
       .add-form .button, .routine-add-form .button { min-width: 76px; }
       .reminder-actions { display: grid; grid-template-columns: 1fr; }
@@ -225,6 +230,8 @@
           <form class="add-form" id="add-form">
             <label class="sr-only" for="new-task">Añadir pendiente</label>
             <input id="new-task" type="text" placeholder="Añadir un pendiente…" autocomplete="off">
+            <label class="sr-only" for="new-task-due">Fecha límite (opcional)</label>
+            <input id="new-task-due" type="date" aria-label="Fecha límite del nuevo pendiente">
             <button class="button small" type="submit">Añadir</button>
           </form>
           <div id="task-groups"></div>
@@ -925,11 +932,13 @@
     document.getElementById("add-form").addEventListener("submit", event => {
       event.preventDefault();
       const input = document.getElementById("new-task");
+      const dueDateInput = document.getElementById("new-task-due");
       const title = input.value.trim();
       if (!title) return;
-      state.tasks.unshift({ id: crypto.randomUUID(), title, category: "Otros", url: "", done: false, due: "" });
+      state.tasks.unshift({ id: crypto.randomUUID(), title, category: "Otros", url: "", done: false, due: dueDateInput.value });
       save();
       input.value = "";
+      dueDateInput.value = "";
       renderTasks();
     });
 
